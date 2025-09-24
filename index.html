@@ -22,6 +22,12 @@
     canvas {
       border: 2px solid white;
       background: #222;
+      display: block;
+      margin: 0 auto;
+    }
+    #logic {
+      margin-top: 10px;
+      font-size: 20px;
     }
   </style>
 </head>
@@ -35,6 +41,7 @@
     <button onclick="selectTool(null)">❌ Erase</button>
   </div>
   <canvas id="gameCanvas" width="600" height="600"></canvas>
+  <div id="logic">Total wires: 0</div>
 
   <script>
     const canvas = document.getElementById("gameCanvas");
@@ -67,6 +74,7 @@
 
       grid[y][x] = currentTool; // can be null to erase
       draw();
+      updateLogic();
     });
 
     // Draw grid and items
@@ -107,7 +115,22 @@
       }
     }
 
+    // Logic: count wires
+    function updateLogic() {
+      let wireCount = 0;
+      for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+          if (grid[y][x] === "wire") {
+            wireCount++;
+          }
+        }
+      }
+      document.getElementById("logic").textContent = "Total wires: " + wireCount;
+    }
+
+    // Initial draw
     draw();
+    updateLogic();
   </script>
 </body>
 </html>
