@@ -36,27 +36,12 @@
       <h2>Basic Components and Their Functions</h2>
       <ul>
         <li><b>Redstone Dust:</b> Wiring, decays 1 per block (max 15).</li>
-        <li><b>Levers:</b> ON/OFF input (power 15).</li>
+        <li><b>Levers:</b> Double-click to toggle ON/OFF (power 15).</li>
         <li><b>Redstone Torch:</b> Constant power unless inverted (NOT gate).</li>
         <li><b>Repeater:</b> Resets signal to 15, adds delay, locks state.</li>
         <li><b>Comparator:</b> Compares back vs. side input.</li>
         <li><b>Lamp:</b> Turns on when powered.</li>
         <li><b>Piston:</b> Extends when powered.</li>
-      </ul>
-
-      <h2>Logic Gates</h2>
-      <ul>
-        <li><b>NOT:</b> Inverts input (Torch).</li>
-        <li><b>AND:</b> Two levers → both ON powers lamp.</li>
-        <li><b>OR:</b> Either input ON powers lamp.</li>
-        <li><b>XOR:</b> Only one input ON powers lamp.</li>
-      </ul>
-
-      <h2>Key Concepts</h2>
-      <ul>
-        <li><b>Ticks:</b> 0.1s time unit. Repeaters add delay.</li>
-        <li><b>Signal Strength:</b> 0–15. Repeaters reset to 15.</li>
-        <li><b>Binary Logic:</b> Everything ON/OFF.</li>
       </ul>
     </div>
   </div>
@@ -65,11 +50,10 @@
     const canvas = document.getElementById("gridCanvas");
     const ctx = canvas.getContext("2d");
     const gridSize = 20;
-    const rows = canvas.height / gridSize;
-    const cols = canvas.width / gridSize;
+    const rows = Math.floor(canvas.height / gridSize);
+    const cols = Math.floor(canvas.width / gridSize);
     let tool = "wire";
 
-    // Grid storage
     const grid = Array.from({ length: rows }, () => Array(cols).fill(null));
 
     // Tool select
@@ -81,46 +65,44 @@
       });
     });
 
-    // Place blocks
+    // Place/remove blocks (single click = place/remove)
     canvas.addEventListener("click", (e) => {
-      const x = Math.floor(e.offsetX / gridSize);
-      const y = Math.floor(e.offsetY / gridSize);
-      if (grid[y][x] && grid[y][x].type === tool) {
-        // Clicking same tool on cell erases (except lever toggling is dblclick)
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / gridSize);
+      const y = Math.floor((e.clientY - rect.top) / gridSize);
+
+      if (!grid[y][x]) {
+        grid[y][x] = { type: tool, power: 0, on: false, dir: 0 };
+      } else if (grid[y][x].type === tool) {
+        // Remove only if same tool
         grid[y][x] = null;
-      } else {
-        grid[y][x] = { type: tool, power: 0, on: false, rotation: 0, extended: false };
       }
       updatePower();
       draw();
     });
 
-    // Double click = toggle/rotate
+    // Double click for toggling/rotating
     canvas.addEventListener("dblclick", (e) => {
-      const x = Math.floor(e.offsetX / gridSize);
-      const y = Math.floor(e.offsetY / gridSize);
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / gridSize);
+      const y = Math.floor((e.clientY - rect.top) / gridSize);
+
       const cell = grid[y][x];
       if (!cell) return;
+
       if (cell.type === "lever") {
         cell.on = !cell.on;
-      } else if (["repeater","comparator","piston"].includes(cell.type)) {
-        cell.rotation = (cell.rotation + 90) % 360;
+      } else {
+        cell.dir = (cell.dir + 1) % 4; // rotate
       }
       updatePower();
       draw();
     });
 
-    // Update cycle
     function updatePower() {
-      // Reset power
-      for (let y=0; y<rows; y++) {
-        for (let x=0; x<cols; x++) {
-          const cell = grid[y][x];
-          if (cell) { cell.power = 0; if (cell.type==="piston") cell.extended=false; }
-        }
-      }
+      // Reset
+      for (let y=0; y<rows; y++) for (let x=0; x<cols; x++) if (grid[y][x]) grid[y][x].power = 0;
 
-      // Queue propagation BFS
       const queue = [];
       for (let y=0; y<rows; y++) {
         for (let x=0; x<cols; x++) {
@@ -141,39 +123,26 @@
       while (queue.length > 0) {
         const {x,y,power} = queue.shift();
         if (power <= 0) continue;
-
         const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
         for (const [dx,dy] of dirs) {
-          const nx = x+dx, ny=y+dy;
+          const nx=x+dx, ny=y+dy;
           if (nx<0||ny<0||nx>=cols||ny>=rows) continue;
           const neighbor = grid[ny][nx];
           if (!neighbor) continue;
-
-          if (neighbor.type === "wire") {
-            if (neighbor.power < power-1) {
-              neighbor.power = power-1;
-              queue.push({x:nx,y:ny,power:power-1});
-            }
+          if (neighbor.type === "wire" && neighbor.power < power-1) {
+            neighbor.power = power-1;
+            queue.push({x:nx,y:ny,power:power-1});
           }
-          if (neighbor.type === "lamp") {
-            if (power>0) neighbor.power = power;
+          if (neighbor.type === "lamp" && power>0) neighbor.power = power;
+          if (neighbor.type === "repeater" && neighbor.power < 15) {
+            neighbor.power = 15;
+            queue.push({x:nx,y:ny,power:15});
           }
-          if (neighbor.type === "repeater") {
-            if (neighbor.power < 15) {
-              neighbor.power = 15;
-              queue.push({x:nx,y:ny,power:15});
-            }
-          }
-          if (neighbor.type === "comparator") {
-            if (neighbor.power < power) {
-              neighbor.power = power;
-            }
+          if (neighbor.type === "comparator" && neighbor.power < power) {
+            neighbor.power = power;
           }
           if (neighbor.type === "piston") {
-            if (power>0) {
-              neighbor.power = power;
-              neighbor.extended = true;
-            }
+            neighbor.power = power;
           }
         }
       }
@@ -190,61 +159,52 @@
       return false;
     }
 
-    // Draw grid
     function draw() {
       ctx.clearRect(0,0,canvas.width,canvas.height);
       for (let y=0; y<rows; y++) {
         for (let x=0; x<cols; x++) {
           ctx.strokeStyle = "#333";
-          ctx.strokeRect(x*gridSize, y*gridSize, gridSize, gridSize);
+          ctx.strokeRect(x*gridSize,y*gridSize,gridSize,gridSize);
           const cell = grid[y][x];
           if (!cell) continue;
-
-          const cx = x*gridSize, cy = y*gridSize;
-
           switch(cell.type) {
             case "wire":
               ctx.fillStyle = cell.power>0 ? "red" : "darkred";
-              ctx.fillRect(cx+5,cy+5,gridSize-10,gridSize-10);
+              ctx.fillRect(x*gridSize+5,y*gridSize+5,gridSize-10,gridSize-10);
               break;
             case "lever":
               ctx.fillStyle = cell.on ? "orange" : "gray";
-              ctx.fillRect(cx+4,cy+4,gridSize-8,gridSize-8);
+              ctx.fillRect(x*gridSize+4,y*gridSize+4,gridSize-8,gridSize-8);
               break;
             case "torch":
               ctx.fillStyle = cell.power>0 ? "red" : "black";
               ctx.beginPath();
-              ctx.arc(cx+gridSize/2,cy+gridSize/2,6,0,Math.PI*2);
+              ctx.arc(x*gridSize+gridSize/2,y*gridSize+gridSize/2,6,0,Math.PI*2);
               ctx.fill();
               break;
             case "lamp":
               ctx.fillStyle = cell.power>0 ? "yellow" : "#444";
-              ctx.fillRect(cx+2,cy+2,gridSize-4,gridSize-4);
+              ctx.fillRect(x*gridSize+2,y*gridSize+2,gridSize-4,gridSize-4);
               break;
             case "repeater":
               ctx.fillStyle = "lightblue";
-              ctx.save();
-              ctx.translate(cx+gridSize/2,cy+gridSize/2);
-              ctx.rotate(cell.rotation*Math.PI/180);
-              ctx.fillRect(-gridSize/2+2,-gridSize/4,gridSize-4,gridSize/2);
-              ctx.restore();
+              ctx.fillRect(x*gridSize+2,y*gridSize+2,gridSize-4,gridSize-4);
+              ctx.fillStyle = "#000";
+              ctx.fillText("▶",x*gridSize+6,y*gridSize+14);
               break;
             case "comparator":
               ctx.fillStyle = "purple";
-              ctx.save();
-              ctx.translate(cx+gridSize/2,cy+gridSize/2);
-              ctx.rotate(cell.rotation*Math.PI/180);
-              ctx.fillRect(-gridSize/2+2,-gridSize/4,gridSize-4,gridSize/2);
-              ctx.restore();
+              ctx.fillRect(x*gridSize+2,y*gridSize+2,gridSize-4,gridSize-4);
+              ctx.fillStyle = "#fff";
+              ctx.fillText("C",x*gridSize+6,y*gridSize+14);
               break;
             case "piston":
-              ctx.fillStyle = "saddlebrown";
-              ctx.fillRect(cx+2,cy+2,gridSize-4,gridSize-4);
-              ctx.fillStyle = "darkgray";
-              if (cell.extended) {
-                ctx.fillRect(cx+gridSize, cy+6, gridSize/2, gridSize-12);
-              } else {
-                ctx.fillRect(cx+gridSize-6, cy+6, 6, gridSize-12);
+              ctx.fillStyle = cell.power>0 ? "green" : "darkgreen";
+              ctx.fillRect(x*gridSize+2,y*gridSize+2,gridSize-4,gridSize-4);
+              if (cell.power>0) {
+                ctx.fillStyle = "lime";
+                let dx=[1,0,-1,0][cell.dir], dy=[0,1,0,-1][cell.dir];
+                ctx.fillRect((x+dx)*gridSize+6,(y+dy)*gridSize+6,gridSize-12,gridSize-12);
               }
               break;
           }
