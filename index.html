@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Circuit Engineering Game</title>
+  <style>
+    body {
+      background: #111;
+      color: #fff;
+      font-family: sans-serif;
+      text-align: center;
+    }
+    #toolbar {
+      margin: 10px;
+    }
+    button {
+      margin: 5px;
+      padding: 10px 15px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    canvas {
+      border: 2px solid white;
+      background: #222;
+    }
+  </style>
+</head>
+<body>
+  <h1>⚡ Circuit Engineering Game ⚡</h1>
+  <div id="toolbar">
+    <button onclick="selectTool('battery')">🔋 Battery</button>
+    <button onclick="selectTool('light')">💡 Light</button>
+    <button onclick="selectTool('block')">⬛ Block</button>
+    <button onclick="selectTool('wire')">➖ Wire</button>
+    <button onclick="selectTool(null)">❌ Erase</button>
+  </div>
+  <canvas id="gameCanvas" width="600" height="600"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const gridSize = 20; // 20x20 grid
+    const cellSize = canvas.width / gridSize;
+
+    let currentTool = null;
+
+    // Grid state
+    const grid = [];
+    for (let y = 0; y < gridSize; y++) {
+      const row = [];
+      for (let x = 0; x < gridSize; x++) {
+        row.push(null);
+      }
+      grid.push(row);
+    }
+
+    function selectTool(tool) {
+      currentTool = tool;
+    }
+
+    // Place on click
+    canvas.addEventListener("click", e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / cellSize);
+      const y = Math.floor((e.clientY - rect.top) / cellSize);
+
+      grid[y][x] = currentTool; // can be null to erase
+      draw();
+    });
+
+    // Draw grid and items
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Grid
+      ctx.strokeStyle = "#444";
+      for (let i = 0; i <= gridSize; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cellSize, 0);
+        ctx.lineTo(i * cellSize, canvas.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i * cellSize);
+        ctx.lineTo(canvas.width, i * cellSize);
+        ctx.stroke();
+      }
+
+      // Items
+      for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+          const item = grid[y][x];
+          if (!item) continue;
+          const cx = x * cellSize + cellSize / 2;
+          const cy = y * cellSize + cellSize / 2;
+
+          ctx.fillStyle = "white";
+          ctx.font = `${cellSize * 0.7}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          if (item === "battery") ctx.fillText("🔋", cx, cy);
+          if (item === "light") ctx.fillText("💡", cx, cy);
+          if (item === "block") ctx.fillText("⬛", cx, cy);
+          if (item === "wire") ctx.fillText("➖", cx, cy);
+        }
+      }
+    }
+
+    draw();
+  </script>
+</body>
+</html>
