@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Circuit Engineering Game</title>
+  <title>Redstone Simulator</title>
   <style>
     body {
       background: #111;
@@ -25,34 +25,30 @@
       display: block;
       margin: 0 auto;
     }
-    #logic {
-      margin-top: 10px;
-      font-size: 20px;
-    }
   </style>
 </head>
 <body>
-  <h1>⚡ Circuit Engineering Game ⚡</h1>
+  <h1>🔴 Minecraft Redstone Simulator</h1>
   <div id="toolbar">
-    <button onclick="selectTool('battery')">🔋 Battery</button>
-    <button onclick="selectTool('light')">💡 Light</button>
-    <button onclick="selectTool('block')">⬛ Block</button>
-    <button onclick="selectTool('wire')">➖ Wire</button>
-    <button onclick="selectTool(null)">❌ Erase</button>
+    <button onclick="selectTool('lever')">Lever</button>
+    <button onclick="selectTool('dust')">Redstone Dust</button>
+    <button onclick="selectTool('lamp')">Redstone Lamp</button>
+    <button onclick="selectTool('block')">Block</button>
+    <button onclick="selectTool('repeater')">Repeater</button>
+    <button onclick="selectTool(null)">Erase</button>
   </div>
   <canvas id="gameCanvas" width="600" height="600"></canvas>
-  <div id="logic">Total wires: 0</div>
 
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    const gridSize = 20; // 20x20 grid
+    const gridSize = 15; // 15x15 grid
     const cellSize = canvas.width / gridSize;
 
     let currentTool = null;
 
-    // Grid state
+    // Each cell: {type, powered, state}
     const grid = [];
     for (let y = 0; y < gridSize; y++) {
       const row = [];
@@ -66,18 +62,72 @@
       currentTool = tool;
     }
 
-    // Place on click
     canvas.addEventListener("click", e => {
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor((e.clientX - rect.left) / cellSize);
       const y = Math.floor((e.clientY - rect.top) / cellSize);
 
-      grid[y][x] = currentTool; // can be null to erase
+      let cell = grid[y][x];
+
+      if (cell && cell.type === "lever") {
+        // Toggle lever
+        cell.state = !cell.state;
+      } else {
+        // Place new thing
+        if (currentTool) {
+          grid[y][x] = {type: currentTool, powered: false, state: false};
+        } else {
+          grid[y][x] = null; // Erase
+        }
+      }
+
+      updatePower();
       draw();
-      updateLogic();
     });
 
-    // Draw grid and items
+    function updatePower() {
+      // Reset all powered states
+      for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+          if (grid[y][x]) grid[y][x].powered = false;
+        }
+      }
+
+      // Power propagation
+      for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+          const cell = grid[y][x];
+          if (cell && cell.type === "lever" && cell.state) {
+            powerNeighbors(x, y);
+          }
+        }
+      }
+    }
+
+    function powerNeighbors(x, y) {
+      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (let [dx, dy] of dirs) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= gridSize || ny >= gridSize) continue;
+        const neighbor = grid[ny][nx];
+        if (!neighbor) continue;
+
+        if (neighbor.type === "dust") {
+          if (!neighbor.powered) {
+            neighbor.powered = true;
+            powerNeighbors(nx, ny); // chain power
+          }
+        }
+        if (neighbor.type === "lamp") {
+          neighbor.powered = true;
+        }
+        if (neighbor.type === "repeater") {
+          neighbor.powered = true;
+          powerNeighbors(nx, ny);
+        }
+      }
+    }
+
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -97,40 +147,43 @@
       // Items
       for (let y = 0; y < gridSize; y++) {
         for (let x = 0; x < gridSize; x++) {
-          const item = grid[y][x];
-          if (!item) continue;
-          const cx = x * cellSize + cellSize / 2;
-          const cy = y * cellSize + cellSize / 2;
+          const cell = grid[y][x];
+          if (!cell) continue;
 
-          ctx.fillStyle = "white";
-          ctx.font = `${cellSize * 0.7}px sans-serif`;
+          const cx = x * cellSize + cellSize/2;
+          const cy = y * cellSize + cellSize/2;
+
+          ctx.font = `${cellSize*0.6}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          if (item === "battery") ctx.fillText("🔋", cx, cy);
-          if (item === "light") ctx.fillText("💡", cx, cy);
-          if (item === "block") ctx.fillText("⬛", cx, cy);
-          if (item === "wire") ctx.fillText("➖", cx, cy);
-        }
-      }
-    }
-
-    // Logic: count wires
-    function updateLogic() {
-      let wireCount = 0;
-      for (let y = 0; y < gridSize; y++) {
-        for (let x = 0; x < gridSize; x++) {
-          if (grid[y][x] === "wire") {
-            wireCount++;
+          if (cell.type === "lever") {
+            ctx.fillStyle = cell.state ? "lime" : "gray";
+            ctx.fillText("🔀", cx, cy);
+          }
+          if (cell.type === "dust") {
+            ctx.fillStyle = cell.powered ? "red" : "#550000";
+            ctx.beginPath();
+            ctx.arc(cx, cy, cellSize/4, 0, Math.PI*2);
+            ctx.fill();
+          }
+          if (cell.type === "lamp") {
+            ctx.fillStyle = cell.powered ? "yellow" : "#333";
+            ctx.fillRect(x*cellSize+4, y*cellSize+4, cellSize-8, cellSize-8);
+          }
+          if (cell.type === "block") {
+            ctx.fillStyle = "#888";
+            ctx.fillRect(x*cellSize+2, y*cellSize+2, cellSize-4, cellSize-4);
+          }
+          if (cell.type === "repeater") {
+            ctx.fillStyle = cell.powered ? "orange" : "#444";
+            ctx.fillRect(x*cellSize+6, y*cellSize+10, cellSize-12, cellSize-20);
           }
         }
       }
-      document.getElementById("logic").textContent = "Total wires: " + wireCount;
     }
 
-    // Initial draw
     draw();
-    updateLogic();
   </script>
 </body>
 </html>
