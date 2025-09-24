@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Redstone Simulator</title>
+  <title>Circuts</title>
   <style>
     body {
       background: #111;
@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <h1>🔴 Minecraft Redstone Simulator</h1>
+  <h1>Circuts</h1>
   <div id="toolbar">
     <button onclick="selectTool('lever')">Lever</button>
     <button onclick="selectTool('dust')">Redstone Dust</button>
@@ -43,12 +43,10 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    const gridSize = 15; // 15x15 grid
+    const gridSize = 15;
     const cellSize = canvas.width / gridSize;
-
     let currentTool = null;
 
-    // Each cell: {type, powered, state}
     const grid = [];
     for (let y = 0; y < gridSize; y++) {
       const row = [];
@@ -70,14 +68,12 @@
       let cell = grid[y][x];
 
       if (cell && cell.type === "lever") {
-        // Toggle lever
         cell.state = !cell.state;
       } else {
-        // Place new thing
         if (currentTool) {
           grid[y][x] = {type: currentTool, powered: false, state: false};
         } else {
-          grid[y][x] = null; // Erase
+          grid[y][x] = null;
         }
       }
 
@@ -93,37 +89,46 @@
         }
       }
 
-      // Power propagation
+      // BFS queue for power spread
+      const queue = [];
+
+      // Start from powered levers
       for (let y = 0; y < gridSize; y++) {
         for (let x = 0; x < gridSize; x++) {
           const cell = grid[y][x];
           if (cell && cell.type === "lever" && cell.state) {
-            powerNeighbors(x, y);
+            queue.push([x, y]);
           }
         }
       }
-    }
 
-    function powerNeighbors(x, y) {
-      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-      for (let [dx, dy] of dirs) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= gridSize || ny >= gridSize) continue;
-        const neighbor = grid[ny][nx];
-        if (!neighbor) continue;
+      const visited = new Set();
 
-        if (neighbor.type === "dust") {
-          if (!neighbor.powered) {
-            neighbor.powered = true;
-            powerNeighbors(nx, ny); // chain power
+      while (queue.length > 0) {
+        const [x, y] = queue.shift();
+        const key = x + "," + y;
+        if (visited.has(key)) continue;
+        visited.add(key);
+
+        const cell = grid[y][x];
+        if (!cell) continue;
+
+        // Mark powered
+        cell.powered = true;
+
+        // Spread to neighbors
+        const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+        for (let [dx, dy] of dirs) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= gridSize || ny >= gridSize) continue;
+          const neighbor = grid[ny][nx];
+          if (!neighbor) continue;
+
+          if (cell.type === "lever" || cell.type === "dust" || cell.type === "repeater") {
+            if (neighbor.type === "dust" || neighbor.type === "lamp" || neighbor.type === "repeater") {
+              queue.push([nx, ny]);
+            }
           }
-        }
-        if (neighbor.type === "lamp") {
-          neighbor.powered = true;
-        }
-        if (neighbor.type === "repeater") {
-          neighbor.powered = true;
-          powerNeighbors(nx, ny);
         }
       }
     }
@@ -131,7 +136,6 @@
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Grid
       ctx.strokeStyle = "#444";
       for (let i = 0; i <= gridSize; i++) {
         ctx.beginPath();
@@ -144,15 +148,12 @@
         ctx.stroke();
       }
 
-      // Items
       for (let y = 0; y < gridSize; y++) {
         for (let x = 0; x < gridSize; x++) {
           const cell = grid[y][x];
           if (!cell) continue;
-
           const cx = x * cellSize + cellSize/2;
           const cy = y * cellSize + cellSize/2;
-
           ctx.font = `${cellSize*0.6}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
