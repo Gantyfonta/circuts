@@ -2,188 +2,224 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Circuts</title>
+  <title>Redstone Circuit Simulator</title>
   <style>
-    body {
-      background: #111;
-      color: #fff;
-      font-family: sans-serif;
-      text-align: center;
+    body { margin: 0; background: #1e1e1e; color: #ddd; font-family: sans-serif; }
+    #toolbar { display: flex; background: #333; padding: 5px; }
+    #toolbar button {
+      margin: 2px; padding: 5px 10px; cursor: pointer;
+      border: none; border-radius: 4px; background: #555; color: #fff;
     }
-    #toolbar {
-      margin: 10px;
+    #toolbar button.active { background: #ff4444; }
+    #container { display: flex; height: calc(100vh - 40px); }
+    #gridCanvas { flex: 2; background: #222; cursor: pointer; }
+    #guide {
+      flex: 1; overflow-y: auto; background: #111;
+      padding: 10px; font-size: 14px; line-height: 1.4em;
     }
-    button {
-      margin: 5px;
-      padding: 10px 15px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    canvas {
-      border: 2px solid white;
-      background: #222;
-      display: block;
-      margin: 0 auto;
-    }
+    h2, h3 { color: #ffcc44; }
   </style>
 </head>
 <body>
-  <h1>Circuts</h1>
   <div id="toolbar">
-    <button onclick="selectTool('lever')">Lever</button>
-    <button onclick="selectTool('dust')">Redstone Dust</button>
-    <button onclick="selectTool('lamp')">Redstone Lamp</button>
-    <button onclick="selectTool('block')">Block</button>
-    <button onclick="selectTool('repeater')">Repeater</button>
-    <button onclick="selectTool(null)">Erase</button>
+    <button data-tool="wire">Wire</button>
+    <button data-tool="lever">Lever</button>
+    <button data-tool="torch">Torch</button>
+    <button data-tool="lamp">Lamp</button>
+    <button data-tool="repeater">Repeater</button>
+    <button data-tool="comparator">Comparator</button>
   </div>
-  <canvas id="gameCanvas" width="600" height="600"></canvas>
+  <div id="container">
+    <canvas id="gridCanvas" width="800" height="600"></canvas>
+    <div id="guide">
+      <h2>Basic Components and Their Functions</h2>
+      <ul>
+        <li><b>Redstone Dust:</b> Wiring, decays 1 per block (max 15).</li>
+        <li><b>Levers:</b> ON/OFF input (power 15).</li>
+        <li><b>Redstone Torch:</b> Constant power unless inverted (NOT gate).</li>
+        <li><b>Repeater:</b> Resets signal to 15, adds delay, locks state.</li>
+        <li><b>Comparator:</b> Compares back vs. side input.</li>
+        <li><b>Lamp:</b> Turns on when powered.</li>
+      </ul>
+
+      <h2>Logic Gates</h2>
+      <ul>
+        <li><b>NOT:</b> Inverts input (Torch).</li>
+        <li><b>AND:</b> Two levers → both ON powers lamp.</li>
+        <li><b>OR:</b> Either input ON powers lamp.</li>
+        <li><b>XOR:</b> Only one input ON powers lamp.</li>
+      </ul>
+
+      <h2>Key Concepts</h2>
+      <ul>
+        <li><b>Ticks:</b> 0.1s time unit. Repeaters add delay.</li>
+        <li><b>Signal Strength:</b> 0–15. Repeaters reset to 15.</li>
+        <li><b>Binary Logic:</b> Everything ON/OFF.</li>
+      </ul>
+    </div>
+  </div>
 
   <script>
-    const canvas = document.getElementById("gameCanvas");
+    const canvas = document.getElementById("gridCanvas");
     const ctx = canvas.getContext("2d");
+    const gridSize = 20;
+    const rows = canvas.height / gridSize;
+    const cols = canvas.width / gridSize;
+    let tool = "wire";
 
-    const gridSize = 15;
-    const cellSize = canvas.width / gridSize;
-    let currentTool = null;
+    // Grid storage
+    const grid = Array.from({ length: rows }, () => Array(cols).fill(null));
 
-    const grid = [];
-    for (let y = 0; y < gridSize; y++) {
-      const row = [];
-      for (let x = 0; x < gridSize; x++) {
-        row.push(null);
-      }
-      grid.push(row);
-    }
+    // Tool select
+    document.querySelectorAll("#toolbar button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#toolbar button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        tool = btn.dataset.tool;
+      });
+    });
 
-    function selectTool(tool) {
-      currentTool = tool;
-    }
-
-    canvas.addEventListener("click", e => {
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.floor((e.clientX - rect.left) / cellSize);
-      const y = Math.floor((e.clientY - rect.top) / cellSize);
-
-      let cell = grid[y][x];
-
-      if (cell && cell.type === "lever") {
-        cell.state = !cell.state;
-      } else {
-        if (currentTool) {
-          grid[y][x] = {type: currentTool, powered: false, state: false};
+    // Place/remove blocks
+    canvas.addEventListener("click", (e) => {
+      const x = Math.floor(e.offsetX / gridSize);
+      const y = Math.floor(e.offsetY / gridSize);
+      if (grid[y][x] && grid[y][x].type === tool) {
+        if (tool === "lever") {
+          // toggle lever
+          grid[y][x].on = !grid[y][x].on;
         } else {
           grid[y][x] = null;
         }
+      } else {
+        grid[y][x] = { type: tool, power: 0, on: false };
       }
-
       updatePower();
       draw();
     });
 
+    // Update cycle
     function updatePower() {
-      // Reset all powered states
-      for (let y = 0; y < gridSize; y++) {
-        for (let x = 0; x < gridSize; x++) {
-          if (grid[y][x]) grid[y][x].powered = false;
+      // Reset power
+      for (let y=0; y<rows; y++) {
+        for (let x=0; x<cols; x++) {
+          if (grid[y][x]) grid[y][x].power = 0;
         }
       }
 
-      // BFS queue for power spread
+      // Queue propagation BFS
       const queue = [];
-
-      // Start from powered levers
-      for (let y = 0; y < gridSize; y++) {
-        for (let x = 0; x < gridSize; x++) {
+      for (let y=0; y<rows; y++) {
+        for (let x=0; x<cols; x++) {
           const cell = grid[y][x];
-          if (cell && cell.type === "lever" && cell.state) {
-            queue.push([x, y]);
+          if (!cell) continue;
+          if (cell.type === "lever" && cell.on) {
+            cell.power = 15;
+            queue.push({x,y,power:15});
+          }
+          if (cell.type === "torch") {
+            // Torch powers unless directly powered
+            let powered = isPowered(x,y);
+            cell.power = powered ? 0 : 15;
+            if (cell.power > 0) queue.push({x,y,power:15});
           }
         }
       }
 
-      const visited = new Set();
-
       while (queue.length > 0) {
-        const [x, y] = queue.shift();
-        const key = x + "," + y;
-        if (visited.has(key)) continue;
-        visited.add(key);
+        const {x,y,power} = queue.shift();
+        if (power <= 0) continue;
 
-        const cell = grid[y][x];
-        if (!cell) continue;
-
-        // Mark powered
-        cell.powered = true;
-
-        // Spread to neighbors
         const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-        for (let [dx, dy] of dirs) {
-          const nx = x + dx, ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= gridSize || ny >= gridSize) continue;
+        for (const [dx,dy] of dirs) {
+          const nx = x+dx, ny=y+dy;
+          if (nx<0||ny<0||nx>=cols||ny>=rows) continue;
           const neighbor = grid[ny][nx];
-          if (!neighbor) continue;
-
-          if (cell.type === "lever" || cell.type === "dust" || cell.type === "repeater") {
-            if (neighbor.type === "dust" || neighbor.type === "lamp" || neighbor.type === "repeater") {
-              queue.push([nx, ny]);
+          if (!neighbor) {
+            // bare wire placement
+            grid[ny][nx] = null;
+            continue;
+          }
+          if (neighbor.type === "wire") {
+            if (neighbor.power < power-1) {
+              neighbor.power = power-1;
+              queue.push({x:nx,y:ny,power:power-1});
+            }
+          }
+          if (neighbor.type === "lamp") {
+            if (power>0) neighbor.power = power;
+          }
+          if (neighbor.type === "repeater") {
+            // simple: just forward power at full strength
+            if (neighbor.power < 15) {
+              neighbor.power = 15;
+              queue.push({x:nx,y:ny,power:15});
+            }
+          }
+          if (neighbor.type === "comparator") {
+            // read back input
+            if (neighbor.power < power) {
+              neighbor.power = power;
             }
           }
         }
       }
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      ctx.strokeStyle = "#444";
-      for (let i = 0; i <= gridSize; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * cellSize, 0);
-        ctx.lineTo(i * cellSize, canvas.height);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, i * cellSize);
-        ctx.lineTo(canvas.width, i * cellSize);
-        ctx.stroke();
+    function isPowered(x,y) {
+      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (const [dx,dy] of dirs) {
+        const nx=x+dx, ny=y+dy;
+        if (nx<0||ny<0||nx>=cols||ny>=rows) continue;
+        const neighbor = grid[ny][nx];
+        if (neighbor && neighbor.power>0) return true;
       }
+      return false;
+    }
 
-      for (let y = 0; y < gridSize; y++) {
-        for (let x = 0; x < gridSize; x++) {
+    // Draw grid
+    function draw() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      for (let y=0; y<rows; y++) {
+        for (let x=0; x<cols; x++) {
+          ctx.strokeStyle = "#333";
+          ctx.strokeRect(x*gridSize, y*gridSize, gridSize, gridSize);
           const cell = grid[y][x];
           if (!cell) continue;
-          const cx = x * cellSize + cellSize/2;
-          const cy = y * cellSize + cellSize/2;
-          ctx.font = `${cellSize*0.6}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
 
-          if (cell.type === "lever") {
-            ctx.fillStyle = cell.state ? "lime" : "gray";
-            ctx.fillText("🔀", cx, cy);
-          }
-          if (cell.type === "dust") {
-            ctx.fillStyle = cell.powered ? "red" : "#550000";
-            ctx.beginPath();
-            ctx.arc(cx, cy, cellSize/4, 0, Math.PI*2);
-            ctx.fill();
-          }
-          if (cell.type === "lamp") {
-            ctx.fillStyle = cell.powered ? "yellow" : "#333";
-            ctx.fillRect(x*cellSize+4, y*cellSize+4, cellSize-8, cellSize-8);
-          }
-          if (cell.type === "block") {
-            ctx.fillStyle = "#888";
-            ctx.fillRect(x*cellSize+2, y*cellSize+2, cellSize-4, cellSize-4);
-          }
-          if (cell.type === "repeater") {
-            ctx.fillStyle = cell.powered ? "orange" : "#444";
-            ctx.fillRect(x*cellSize+6, y*cellSize+10, cellSize-12, cellSize-20);
+          switch(cell.type) {
+            case "wire":
+              ctx.fillStyle = cell.power>0 ? "red" : "darkred";
+              ctx.fillRect(x*gridSize+5,y*gridSize+5,gridSize-10,gridSize-10);
+              break;
+            case "lever":
+              ctx.fillStyle = cell.on ? "orange" : "gray";
+              ctx.fillRect(x*gridSize+4,y*gridSize+4,gridSize-8,gridSize-8);
+              break;
+            case "torch":
+              ctx.fillStyle = cell.power>0 ? "red" : "black";
+              ctx.beginPath();
+              ctx.arc(x*gridSize+gridSize/2,y*gridSize+gridSize/2,6,0,Math.PI*2);
+              ctx.fill();
+              break;
+            case "lamp":
+              ctx.fillStyle = cell.power>0 ? "yellow" : "#444";
+              ctx.fillRect(x*gridSize+2,y*gridSize+2,gridSize-4,gridSize-4);
+              break;
+            case "repeater":
+              ctx.fillStyle = "lightblue";
+              ctx.fillRect(x*gridSize+2,y*gridSize+2,gridSize-4,gridSize-4);
+              break;
+            case "comparator":
+              ctx.fillStyle = "purple";
+              ctx.fillRect(x*gridSize+2,y*gridSize+2,gridSize-4,gridSize-4);
+              break;
           }
         }
       }
     }
 
+    // Run tick updates
+    setInterval(()=>{ updatePower(); draw(); },200);
     draw();
   </script>
 </body>
